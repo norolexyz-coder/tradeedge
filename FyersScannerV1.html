@@ -1,0 +1,776 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
+<title>TradeEdge — Live Volume Surge Scanner</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=JetBrains+Mono:wght@400;500;700&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet"/>
+<style>
+:root{
+  --bg:#07090d;--bg2:#0d1117;--bg3:#131b24;--bg4:#192231;
+  --border:#1e2d3d;--border2:#263545;
+  --accent:#00e5a0;--accent-dim:rgba(0,229,160,0.1);
+  --blue:#3b82f6;--blue-dim:rgba(59,130,246,0.1);
+  --red:#f43f5e;--red-dim:rgba(244,63,94,0.1);
+  --green:#00e5a0;--green-dim:rgba(0,229,160,0.08);
+  --yellow:#eab308;--yellow-dim:rgba(234,179,8,0.1);
+  --orange:#f97316;--orange-dim:rgba(249,115,22,0.1);
+  --text:#f0f6ff;--text2:#8ba0b8;--text3:#3d5470;
+  --fd:'Syne',sans-serif;--fm:'JetBrains Mono',monospace;--fb:'DM Sans',sans-serif;
+  --r:10px;--rs:6px;
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+body{font-family:var(--fb);background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden;}
+body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
+  background:radial-gradient(ellipse 60% 40% at 0% 0%,rgba(0,229,160,0.06) 0%,transparent 60%),
+  radial-gradient(ellipse 50% 40% at 100% 100%,rgba(59,130,246,0.05) 0%,transparent 60%);}
+body::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
+  background-image:linear-gradient(rgba(0,229,160,0.013) 1px,transparent 1px),linear-gradient(90deg,rgba(0,229,160,0.013) 1px,transparent 1px);
+  background-size:36px 36px;}
+
+@keyframes fadeUp{from{opacity:0;transform:translateY(12px);}to{opacity:1;transform:translateY(0);}}
+@keyframes fadeIn{from{opacity:0;}to{opacity:1;}}
+@keyframes pulse{0%,100%{opacity:1;}50%{opacity:0.25;}}
+@keyframes spin{to{transform:rotate(360deg);}}
+@keyframes glow{0%,100%{box-shadow:0 0 10px rgba(0,229,160,0.3);}50%{box-shadow:0 0 28px rgba(0,229,160,0.7);}}
+@keyframes surge{0%{transform:scale(1);}50%{transform:scale(1.02);}100%{transform:scale(1);}}
+@keyframes slideIn{from{transform:translateX(100%);opacity:0;}to{transform:translateX(0);opacity:1;}}
+@keyframes barGrow{from{width:0%;}to{width:var(--w);}}
+@keyframes numFlash{0%,100%{color:inherit;}50%{color:#fff;}}
+
+::-webkit-scrollbar{width:3px;height:3px;}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px;}
+
+/* ── HEADER ── */
+.header{
+  position:sticky;top:0;z-index:100;
+  background:rgba(7,9,13,0.95);backdrop-filter:blur(24px);
+  border-bottom:1px solid var(--border);
+  padding:0 14px;height:54px;
+  display:flex;align-items:center;justify-content:space-between;
+}
+.logo{font-family:var(--fd);font-size:18px;font-weight:800;color:var(--accent);display:flex;align-items:center;gap:6px;letter-spacing:1px;}
+.logo-bolt{width:24px;height:24px;background:var(--accent);clip-path:polygon(60% 0%,20% 45%,55% 45%,40% 100%,80% 55%,45% 55%);flex-shrink:0;}
+.header-right{display:flex;align-items:center;gap:7px;}
+
+/* ── STATUS CHIPS ── */
+.chip{display:flex;align-items:center;gap:4px;font-family:var(--fm);font-size:10px;background:var(--bg3);border:1px solid var(--border);padding:4px 9px;border-radius:20px;color:var(--text2);}
+.chip-dot{width:5px;height:5px;border-radius:50%;flex-shrink:0;}
+.cd-live{background:var(--green);animation:pulse 1.5s infinite;}
+.cd-off{background:var(--red);}
+.cd-conn{background:var(--yellow);animation:pulse 0.8s infinite;}
+
+/* ── MAIN ── */
+.main{padding:12px 12px 20px;position:relative;z-index:1;}
+
+/* ── CONNECT CARD ── */
+.connect-card{
+  background:var(--bg2);border:1px solid var(--border2);
+  border-radius:var(--r);padding:20px;
+  text-align:center;margin-bottom:12px;
+  animation:fadeUp 0.4s ease;
+}
+.connect-title{font-family:var(--fd);font-size:20px;font-weight:800;color:var(--accent);margin-bottom:6px;}
+.connect-sub{font-size:12px;color:var(--text3);margin-bottom:20px;line-height:1.6;}
+.fyers-badge{
+  display:inline-flex;align-items:center;gap:6px;
+  background:linear-gradient(135deg,#ff6b35,#f97316);
+  color:#fff;padding:4px 12px;border-radius:20px;
+  font-family:var(--fd);font-size:11px;font-weight:700;letter-spacing:1px;
+  margin-bottom:16px;
+}
+
+/* ── FORM ── */
+.form-section{background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:14px;margin-bottom:10px;text-align:left;}
+.form-title{font-family:var(--fd);font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:12px;}
+.ig{margin-bottom:9px;}
+.ig-label{font-size:10px;color:var(--text3);letter-spacing:1px;text-transform:uppercase;margin-bottom:4px;display:block;font-family:var(--fd);font-weight:600;}
+input,select{width:100%;background:var(--bg4);border:1px solid var(--border);color:var(--text);padding:9px 11px;border-radius:var(--rs);font-size:13px;font-family:var(--fb);transition:border-color 0.2s;outline:none;-webkit-appearance:none;}
+input:focus,select:focus{border-color:var(--accent);}
+select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%238ba0b8'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center;padding-right:28px;}
+select option{background:var(--bg3);}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+
+/* ── BUTTONS ── */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:5px;padding:10px 16px;border-radius:var(--rs);font-size:12px;font-weight:700;cursor:pointer;border:none;transition:all 0.2s;font-family:var(--fd);letter-spacing:0.5px;text-transform:uppercase;}
+.btn:active{transform:scale(0.97);}
+.btn-primary{background:var(--accent);color:#000;box-shadow:0 0 16px rgba(0,229,160,0.2);}
+.btn-primary:hover{background:#00ffb0;box-shadow:0 0 28px rgba(0,229,160,0.4);}
+.btn-secondary{background:var(--bg3);color:var(--text2);border:1px solid var(--border2);}
+.btn-secondary:hover{border-color:var(--accent);color:var(--accent);}
+.btn-orange{background:linear-gradient(135deg,#ff6b35,#f97316);color:#fff;}
+.btn-full{width:100%;}
+.btn-sm{padding:5px 10px;font-size:10px;}
+.btn:disabled{opacity:0.5;cursor:not-allowed;}
+.btn-row{display:flex;gap:6px;flex-wrap:wrap;}
+
+/* ── SCANNER CONTROLS ── */
+.scanner-controls{
+  background:var(--bg2);border:1px solid var(--border);
+  border-radius:var(--r);padding:13px;margin-bottom:10px;
+}
+.controls-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px;}
+.controls-title{font-family:var(--fd);font-size:14px;font-weight:800;letter-spacing:1px;}
+.live-indicator{display:flex;align-items:center;gap:5px;font-family:var(--fm);font-size:10px;color:var(--green);}
+.live-dot{width:6px;height:6px;border-radius:50%;background:var(--green);animation:pulse 1s infinite;}
+.filter-row{display:flex;gap:5px;flex-wrap:wrap;align-items:center;}
+.filter-btn{padding:5px 11px;border-radius:20px;font-size:11px;font-weight:700;cursor:pointer;border:1px solid var(--border2);background:var(--bg3);color:var(--text3);transition:all 0.2s;font-family:var(--fd);}
+.filter-btn.active{border-color:var(--accent);color:var(--accent);background:var(--accent-dim);}
+.filter-btn:active{transform:scale(0.95);}
+.stats-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;}
+.stat-mini{background:var(--bg3);border:1px solid var(--border);border-radius:var(--rs);padding:8px 11px;flex:1;min-width:70px;}
+.stat-mini-val{font-family:var(--fm);font-size:16px;font-weight:700;line-height:1;}
+.stat-mini-lbl{font-size:9px;color:var(--text3);letter-spacing:0.5px;margin-top:2px;text-transform:uppercase;}
+
+/* ── SURGE ITEMS ── */
+.surge-list{display:flex;flex-direction:column;gap:6px;}
+
+.surge-item{
+  background:var(--bg2);border:1px solid var(--border);
+  border-radius:var(--r);padding:12px;
+  position:relative;overflow:hidden;
+  transition:all 0.3s;
+  animation:fadeUp 0.35s ease both;
+}
+.surge-item.hot{border-color:rgba(0,229,160,0.35);background:rgba(0,229,160,0.03);}
+.surge-item.very-hot{border-color:rgba(0,229,160,0.5);background:rgba(0,229,160,0.05);animation:surge 0.5s ease;}
+.surge-item.extreme{border-color:rgba(249,115,22,0.5);background:rgba(249,115,22,0.04);animation:surge 0.5s ease;}
+.surge-item.new-surge{animation:surge 0.4s ease,fadeUp 0.35s ease;}
+
+/* surge level indicator bar */
+.surge-level-bar{
+  position:absolute;left:0;top:0;bottom:0;
+  width:3px;border-radius:2px 0 0 2px;
+}
+.slb-watch{background:var(--text3);}
+.slb-hot{background:var(--accent);}
+.slb-very-hot{background:var(--orange);}
+.slb-extreme{background:var(--red);}
+
+.surge-top{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:8px;padding-left:8px;}
+.surge-left{}
+.surge-stock{font-family:var(--fd);font-size:15px;font-weight:800;letter-spacing:0.5px;}
+.surge-exch{font-size:9px;color:var(--text3);margin-top:1px;font-family:var(--fd);letter-spacing:1px;}
+.surge-right{text-align:right;}
+.surge-ratio{font-family:var(--fm);font-size:22px;font-weight:700;line-height:1;}
+.surge-ratio-lbl{font-size:9px;color:var(--text3);margin-top:1px;}
+
+.surge-mid{display:flex;gap:10px;align-items:center;padding-left:8px;margin-bottom:8px;}
+.surge-price{font-family:var(--fm);font-size:14px;font-weight:700;}
+.surge-chg{font-family:var(--fm);font-size:12px;padding:2px 7px;border-radius:3px;}
+.surge-chg-up{background:var(--green-dim);color:var(--green);}
+.surge-chg-down{background:var(--red-dim);color:var(--red);}
+.surge-time{font-size:10px;color:var(--text3);margin-left:auto;font-family:var(--fm);}
+
+/* volume bar */
+.vol-bar-wrap{padding-left:8px;}
+.vol-bar-labels{display:flex;justify-content:space-between;font-size:9px;color:var(--text3);margin-bottom:3px;}
+.vol-bar-track{height:5px;background:var(--bg4);border-radius:3px;overflow:hidden;}
+.vol-bar-fill{height:100%;border-radius:3px;transition:width 0.8s cubic-bezier(.34,1.56,.64,1);}
+.vol-bar-details{display:flex;justify-content:space-between;font-family:var(--fm);font-size:10px;color:var(--text3);margin-top:3px;}
+
+/* surge badges */
+.surge-badges{display:flex;gap:4px;flex-wrap:wrap;padding-left:8px;margin-top:6px;}
+.sbadge{display:inline-flex;align-items:center;gap:2px;padding:2px 7px;border-radius:3px;font-size:9px;font-weight:700;letter-spacing:1px;font-family:var(--fd);}
+.sb-watch{background:var(--bg4);color:var(--text3);border:1px solid var(--border);}
+.sb-hot{background:var(--green-dim);color:var(--green);border:1px solid rgba(0,229,160,0.25);}
+.sb-very-hot{background:var(--orange-dim);color:var(--orange);border:1px solid rgba(249,115,22,0.25);}
+.sb-extreme{background:var(--red-dim);color:var(--red);border:1px solid rgba(244,63,94,0.25);}
+
+/* ── ALERT LOG ── */
+.alert-log{
+  background:var(--bg2);border:1px solid var(--border);
+  border-radius:var(--r);padding:13px;margin-top:10px;
+}
+.alert-log-title{font-family:var(--fd);font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;}
+.alert-item{
+  display:flex;align-items:center;gap:8px;
+  padding:7px 0;border-bottom:1px solid var(--border);
+  animation:slideIn 0.3s ease;
+}
+.alert-item:last-child{border:none;}
+.alert-time{font-family:var(--fm);font-size:10px;color:var(--text3);width:45px;flex-shrink:0;}
+.alert-stock{font-family:var(--fd);font-size:12px;font-weight:700;width:80px;}
+.alert-ratio{font-family:var(--fm);font-size:12px;font-weight:700;}
+.alert-msg{font-size:11px;color:var(--text2);flex:1;}
+
+/* ── EMPTY STATE ── */
+.empty{text-align:center;padding:40px 20px;color:var(--text3);}
+.empty-icon{font-size:40px;margin-bottom:10px;}
+.empty-title{font-family:var(--fd);font-size:14px;font-weight:700;color:var(--text2);margin-bottom:5px;}
+.empty-sub{font-size:11px;line-height:1.6;}
+
+/* ── INFO BOX ── */
+.info-box{background:var(--blue-dim);border:1px solid rgba(59,130,246,0.2);border-radius:var(--rs);padding:10px;font-size:11px;color:var(--blue);line-height:1.6;margin-bottom:10px;}
+.warn-box{background:var(--yellow-dim);border:1px solid rgba(234,179,8,0.2);border-radius:var(--rs);padding:10px;font-size:11px;color:var(--yellow);line-height:1.6;margin-bottom:10px;}
+
+/* ── SPINNER ── */
+.spinner{width:14px;height:14px;border:2px solid rgba(0,229,160,0.2);border-top-color:var(--accent);border-radius:50%;animation:spin 0.6s linear infinite;display:inline-block;}
+
+/* ── TOAST ── */
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(16px);background:var(--bg3);border:1px solid var(--border2);color:var(--text);padding:9px 16px;border-radius:var(--r);font-size:12px;z-index:999;opacity:0;transition:all 0.3s;box-shadow:0 8px 32px rgba(0,0,0,0.5);white-space:nowrap;}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+.toast.err{border-color:var(--red);color:var(--red);}
+.toast.suc{border-color:var(--green);color:var(--green);}
+
+/* ── WATCHLIST EDITOR ── */
+.wl-editor{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:13px;margin-bottom:10px;}
+.wl-title{font-family:var(--fd);font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;}
+.wl-grid{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px;}
+.wl-tag{display:flex;align-items:center;gap:4px;padding:4px 9px;border-radius:20px;font-size:11px;font-family:var(--fd);font-weight:700;background:var(--bg3);border:1px solid var(--border2);color:var(--text2);}
+.wl-tag-x{cursor:pointer;color:var(--text3);font-size:12px;line-height:1;}
+.wl-tag-x:hover{color:var(--red);}
+.wl-add{display:flex;gap:6px;}
+
+/* ── MARKET HOURS WARNING ── */
+.hours-warn{background:var(--yellow-dim);border:1px solid rgba(234,179,8,0.2);border-radius:var(--rs);padding:8px 12px;font-size:11px;color:var(--yellow);margin-bottom:10px;display:flex;align-items:center;gap:6px;}
+
+@media(min-width:600px){
+  .main{padding:16px 20px 20px;}
+  .g2{grid-template-columns:1fr 1fr 1fr;}
+}
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="header">
+  <div class="logo"><div class="logo-bolt"></div>TRADEEDGE<span style="font-size:9px;color:var(--text3);font-weight:600;letter-spacing:3px;align-self:flex-end;margin-bottom:2px;margin-left:2px">SCANNER</span></div>
+  <div class="header-right">
+    <div class="chip"><div class="chip-dot cd-off" id="fyers-dot"></div><span id="fyers-status">Disconnected</span></div>
+    <div class="chip" id="mkt-chip"><div class="chip-dot cd-off" id="mkt-dot"></div><span id="mkt-txt">—</span></div>
+  </div>
+</div>
+
+<div class="main">
+
+  <!-- CONNECT SCREEN -->
+  <div id="connect-screen">
+    <div class="connect-card">
+      <div style="font-size:40px;margin-bottom:10px">📡</div>
+      <div class="connect-title">Volume Surge Scanner</div>
+      <div class="connect-sub">Real-time volume surge detection powered by Fyers API. Detects stocks where volume is 2x, 3x, 5x above average — the earliest signal of a big move.</div>
+      <div class="fyers-badge">⚡ Powered by Fyers API</div>
+    </div>
+
+    <div class="form-section">
+      <div class="form-title">Fyers Credentials</div>
+      <div class="info-box">
+        📋 Get these from <b>myaccount.fyers.in → API → My Apps</b><br>
+        Redirect URL must be set to your GitHub Pages URL.
+      </div>
+      <div class="ig"><label class="ig-label">Client ID</label><input id="f-clientid" placeholder="XX00000-100"/></div>
+      <div class="ig"><label class="ig-label">Secret Key</label><input id="f-secret" type="password" placeholder="Your Fyers secret key"/></div>
+      <div class="ig"><label class="ig-label">Redirect URL</label><input id="f-redirect" placeholder="https://norolexyz-coder.github.io/tradeedge/" value="https://norolexyz-coder.github.io/tradeedge/"/></div>
+    </div>
+
+    <div class="warn-box">
+      ⚠️ You need to login to Fyers every day to get a fresh token. Takes 30 seconds. Click below to start.
+    </div>
+
+    <button class="btn btn-orange btn-full" onclick="startFyersLogin()" style="margin-bottom:8px">
+      🔐 Login with Fyers
+    </button>
+    <p style="font-size:10px;color:var(--text3);text-align:center;margin-top:6px">After login, you'll be redirected back automatically</p>
+  </div>
+
+  <!-- TOKEN INPUT (after redirect) -->
+  <div id="token-screen" style="display:none">
+    <div class="form-section">
+      <div class="form-title">Complete Connection</div>
+      <div class="info-box">Paste your Fyers access token below. You can find it in the URL after login, or from myaccount.fyers.in → API.</div>
+      <div class="ig"><label class="ig-label">Access Token</label><input id="f-token" placeholder="Paste your access token here"/></div>
+      <div class="ig"><label class="ig-label">Client ID</label><input id="f-clientid2" placeholder="XX00000-100"/></div>
+      <button class="btn btn-primary btn-full" onclick="connectWithToken()">Connect & Start Scanner</button>
+    </div>
+    <button class="btn btn-secondary btn-full" onclick="showConnectScreen()" style="margin-top:6px">← Back</button>
+  </div>
+
+  <!-- SCANNER SCREEN -->
+  <div id="scanner-screen" style="display:none">
+
+    <!-- Market hours warning -->
+    <div class="hours-warn" id="hours-warn" style="display:none">
+      ⏰ Market is closed. Scanner will show data from last session. Live updates resume at 9:15 AM IST.
+    </div>
+
+    <!-- Watchlist Editor -->
+    <div class="wl-editor">
+      <div class="wl-title">
+        Stocks to Scan
+        <span style="font-size:10px;color:var(--text2)" id="wl-count">0 stocks</span>
+      </div>
+      <div class="wl-grid" id="wl-tags"></div>
+      <div class="wl-add">
+        <input id="wl-input" placeholder="Add stock e.g. RELIANCE" style="flex:1" onkeydown="if(event.key==='Enter') addStock()"/>
+        <button class="btn btn-secondary btn-sm" onclick="addStock()">+ Add</button>
+        <button class="btn btn-secondary btn-sm" onclick="loadNifty50()">Load Nifty 50</button>
+      </div>
+    </div>
+
+    <!-- Scanner Controls -->
+    <div class="scanner-controls">
+      <div class="controls-top">
+        <div class="controls-title">🔥 Live Volume Surge</div>
+        <div class="live-indicator" id="live-ind" style="display:none">
+          <div class="live-dot"></div>
+          LIVE · <span id="last-update">—</span>
+        </div>
+      </div>
+
+      <div class="filter-row">
+        <span style="font-size:10px;color:var(--text3);font-family:var(--fd);font-weight:600">MIN SURGE:</span>
+        <div class="filter-btn active" onclick="setFilter(1.5,this)">1.5x</div>
+        <div class="filter-btn" onclick="setFilter(2,this)">2x</div>
+        <div class="filter-btn" onclick="setFilter(3,this)">3x</div>
+        <div class="filter-btn" onclick="setFilter(5,this)">5x</div>
+        <div class="filter-btn" onclick="setFilter(10,this)">10x</div>
+      </div>
+
+      <div class="stats-row">
+        <div class="stat-mini">
+          <div class="stat-mini-val" id="sc-total" style="color:var(--text)">0</div>
+          <div class="stat-mini-lbl">Scanning</div>
+        </div>
+        <div class="stat-mini" style="border-color:rgba(0,229,160,0.2)">
+          <div class="stat-mini-val" id="sc-surging" style="color:var(--green)">0</div>
+          <div class="stat-mini-lbl">Surging</div>
+        </div>
+        <div class="stat-mini" style="border-color:rgba(249,115,22,0.2)">
+          <div class="stat-mini-val" id="sc-hot" style="color:var(--orange)">0</div>
+          <div class="stat-mini-lbl">Very Hot 5x+</div>
+        </div>
+        <div class="stat-mini">
+          <div class="stat-mini-val" id="sc-alerts" style="color:var(--yellow)">0</div>
+          <div class="stat-mini-lbl">Alerts Today</div>
+        </div>
+      </div>
+
+      <div class="btn-row" style="margin-top:10px">
+        <button class="btn btn-primary" id="scan-btn" onclick="toggleScanner()">▶ Start Scanner</button>
+        <button class="btn btn-secondary btn-sm" onclick="refreshOnce()">↻ Refresh Now</button>
+        <button class="btn btn-secondary btn-sm" onclick="showConnectScreen();stopScanner()">Disconnect</button>
+      </div>
+    </div>
+
+    <!-- Surge Results -->
+    <div id="surge-list-container">
+      <div class="empty">
+        <div class="empty-icon">🔍</div>
+        <div class="empty-title">Scanner Ready</div>
+        <div class="empty-sub">Add stocks to scan and click Start Scanner.<br>Surges will appear here in real-time.</div>
+      </div>
+    </div>
+
+    <!-- Alert Log -->
+    <div class="alert-log">
+      <div class="alert-log-title">
+        🔔 Surge Alert Log
+        <button class="btn btn-secondary btn-sm" onclick="clearAlerts()">Clear</button>
+      </div>
+      <div id="alert-log-list">
+        <div style="font-size:11px;color:var(--text3);text-align:center;padding:12px">No alerts yet today</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ══════════════════════════════════════════
+// STATE
+// ══════════════════════════════════════════
+const FYERS_KEY='te_fyers';
+let fyersToken=null,fyersClientId=null;
+let scannerRunning=false,scanInterval=null;
+let minFilter=1.5,alertCount=0;
+let stockData={}; // {symbol: {ltp, chg, vol, avgVol, ratio, updated}}
+let alertLog=[];
+let scanStocks=[];
+
+// Default Nifty 50 stocks
+const NIFTY50=[
+  'RELIANCE','TCS','HDFCBANK','ICICIBANK','INFY','HINDUNILVR','ITC','SBIN','BHARTIARTL','KOTAKBANK',
+  'LT','AXISBANK','ASIANPAINT','MARUTI','TITAN','BAJFINANCE','WIPRO','HCLTECH','ULTRACEMCO','ONGC',
+  'TATAMOTORS','NTPC','SUNPHARMA','POWERGRID','TECHM','TATASTEEL','JSWSTEEL','COALINDIA','BPCL','IOC',
+  'GRASIM','ADANIPORTS','CIPLA','DRREDDY','EICHERMOT','BAJAJFINSV','HEROMOTOCO','DIVISLAB','BRITANNIA','INDUSINDBK',
+  'HINDALCO','SHREECEM','UPL','BAJAJ-AUTO','SBILIFE','HDFCLIFE','APOLLOHOSP','TATACONSUM','M&M','NESTLEIND'
+];
+
+// ══════════════════════════════════════════
+// INIT
+// ══════════════════════════════════════════
+window.onload=()=>{
+  updateMarket();setInterval(updateMarket,30000);
+  // Try restore session
+  const saved=localStorage.getItem(FYERS_KEY);
+  if(saved){
+    try{
+      const s=JSON.parse(saved);
+      if(s.token&&s.clientId&&s.expiry>Date.now()){
+        fyersToken=s.token;fyersClientId=s.clientId;
+        scanStocks=s.stocks||NIFTY50.slice(0,20);
+        showScanner();
+        toast('✅ Fyers session restored!','suc');
+      }
+    }catch{}
+  }
+  // Check if redirected back from Fyers with auth_code
+  const params=new URLSearchParams(window.location.search);
+  const authCode=params.get('auth_code')||params.get('code');
+  if(authCode){
+    document.getElementById('connect-screen').style.display='none';
+    document.getElementById('token-screen').style.display='block';
+    toast('Auth code received! Now get your access token.','suc');
+    // Clean URL
+    window.history.replaceState({},'',window.location.pathname);
+  }
+};
+
+// ══════════════════════════════════════════
+// MARKET STATUS
+// ══════════════════════════════════════════
+function updateMarket(){
+  const ist=new Date(new Date().toLocaleString('en-US',{timeZone:'Asia/Kolkata'}));
+  const tot=ist.getHours()*60+ist.getMinutes(),day=ist.getDay();
+  const dot=document.getElementById('mkt-dot'),txt=document.getElementById('mkt-txt');
+  const warn=document.getElementById('hours-warn');
+  const isOpen=day>=1&&day<=5&&tot>=555&&tot<915;
+  if(day===0||day===6){dot.className='chip-dot cd-off';txt.textContent='WEEKEND';if(warn) warn.style.display='flex';}
+  else if(isOpen){dot.className='chip-dot cd-live';txt.textContent='OPEN';if(warn) warn.style.display='none';}
+  else if(tot>=540&&tot<555){dot.className='chip-dot cd-conn';txt.textContent='PRE-OPEN';if(warn) warn.style.display='none';}
+  else{dot.className='chip-dot cd-off';txt.textContent='CLOSED';if(warn) warn.style.display='flex';}
+}
+
+// ══════════════════════════════════════════
+// FYERS LOGIN FLOW
+// ══════════════════════════════════════════
+function startFyersLogin(){
+  const clientId=document.getElementById('f-clientid').value.trim();
+  const redirect=document.getElementById('f-redirect').value.trim();
+  if(!clientId){toast('Enter your Client ID first',1);return;}
+  if(!redirect){toast('Enter redirect URL',1);return;}
+  // Save client ID for later
+  localStorage.setItem('te_fyers_cid',clientId);
+  localStorage.setItem('te_fyers_redirect',redirect);
+  // Build Fyers auth URL
+  const authUrl=`https://api-t1.fyers.in/api/v3/generate-authcode?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirect)}&response_type=code&state=tradeedge`;
+  toast('Opening Fyers login...');
+  setTimeout(()=>{window.location.href=authUrl;},500);
+}
+
+function connectWithToken(){
+  const token=document.getElementById('f-token').value.trim();
+  const clientId=document.getElementById('f-clientid2').value.trim()||localStorage.getItem('te_fyers_cid')||'';
+  if(!token){toast('Paste your access token',1);return;}
+  if(!clientId){toast('Enter Client ID',1);return;}
+  fyersToken=token;fyersClientId=clientId;
+  // Save session (expires in 24 hours)
+  localStorage.setItem(FYERS_KEY,JSON.stringify({token,clientId,stocks:scanStocks,expiry:Date.now()+86400000}));
+  showScanner();
+  toast('✅ Connected to Fyers!','suc');
+}
+
+function showConnectScreen(){
+  document.getElementById('connect-screen').style.display='block';
+  document.getElementById('token-screen').style.display='none';
+  document.getElementById('scanner-screen').style.display='none';
+  document.getElementById('fyers-dot').className='chip-dot cd-off';
+  document.getElementById('fyers-status').textContent='Disconnected';
+}
+
+function showScanner(){
+  document.getElementById('connect-screen').style.display='none';
+  document.getElementById('token-screen').style.display='none';
+  document.getElementById('scanner-screen').style.display='block';
+  document.getElementById('fyers-dot').className='chip-dot cd-live';
+  document.getElementById('fyers-status').textContent='Fyers Connected';
+  if(!scanStocks.length) scanStocks=NIFTY50.slice(0,20);
+  renderWatchlistTags();
+  updateMarket();
+}
+
+// ══════════════════════════════════════════
+// WATCHLIST
+// ══════════════════════════════════════════
+function addStock(){
+  const input=document.getElementById('wl-input');
+  const sym=input.value.trim().toUpperCase();
+  if(!sym) return;
+  if(scanStocks.includes(sym)){toast('Already in list',1);input.value='';return;}
+  scanStocks.push(sym);
+  input.value='';
+  renderWatchlistTags();
+  saveSession();
+  toast('Added '+sym);
+}
+
+function removeStock(sym){
+  scanStocks=scanStocks.filter(s=>s!==sym);
+  delete stockData[sym];
+  renderWatchlistTags();
+  renderSurgeList();
+  saveSession();
+}
+
+function loadNifty50(){
+  scanStocks=[...NIFTY50];
+  renderWatchlistTags();
+  saveSession();
+  toast('Loaded all Nifty 50 stocks');
+}
+
+function renderWatchlistTags(){
+  const c=document.getElementById('wl-tags');
+  c.innerHTML=scanStocks.map(s=>`<div class="wl-tag">${s}<span class="wl-tag-x" onclick="removeStock('${s}')">×</span></div>`).join('');
+  document.getElementById('wl-count').textContent=scanStocks.length+' stocks';
+  document.getElementById('sc-total').textContent=scanStocks.length;
+}
+
+function saveSession(){
+  if(fyersToken) localStorage.setItem(FYERS_KEY,JSON.stringify({token:fyersToken,clientId:fyersClientId,stocks:scanStocks,expiry:Date.now()+86400000}));
+}
+
+// ══════════════════════════════════════════
+// SCANNER ENGINE
+// ══════════════════════════════════════════
+function setFilter(val,btn){
+  minFilter=val;
+  document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  renderSurgeList();
+}
+
+function toggleScanner(){
+  if(scannerRunning) stopScanner();
+  else startScanner();
+}
+
+function startScanner(){
+  if(!fyersToken){toast('Not connected to Fyers',1);return;}
+  if(!scanStocks.length){toast('Add stocks to scan first',1);return;}
+  scannerRunning=true;
+  document.getElementById('scan-btn').textContent='⏹ Stop Scanner';
+  document.getElementById('scan-btn').style.background='var(--red)';
+  document.getElementById('live-ind').style.display='flex';
+  fetchAllQuotes();
+  scanInterval=setInterval(fetchAllQuotes,15000); // refresh every 15 seconds
+  toast('Scanner started! Refreshing every 15s');
+}
+
+function stopScanner(){
+  scannerRunning=false;
+  clearInterval(scanInterval);
+  document.getElementById('scan-btn').textContent='▶ Start Scanner';
+  document.getElementById('scan-btn').style.background='';
+  document.getElementById('live-ind').style.display='none';
+}
+
+async function refreshOnce(){
+  if(!fyersToken){toast('Not connected',1);return;}
+  await fetchAllQuotes();
+  toast('Refreshed!');
+}
+
+// ══════════════════════════════════════════
+// FYERS API CALLS
+// ══════════════════════════════════════════
+async function fetchAllQuotes(){
+  if(!fyersToken||!scanStocks.length) return;
+  try{
+    // Fyers accepts comma-separated symbols like NSE:RELIANCE-EQ
+    const symbols=scanStocks.map(s=>`NSE:${s}-EQ`).join(',');
+    const url=`https://api-t1.fyers.in/api/v3/quotes?symbols=${encodeURIComponent(symbols)}`;
+    const r=await fetch(url,{headers:{'Authorization':`${fyersClientId}:${fyersToken}`}});
+    const d=await r.json();
+    if(d.code===200&&d.d){
+      processQuotes(d.d);
+    } else if(d.code===401){
+      stopScanner();
+      toast('Token expired. Please reconnect.',1);
+      showConnectScreen();
+    } else {
+      console.error('Fyers API error:',d);
+    }
+  }catch(e){
+    console.error('Fetch error:',e);
+    // If CORS error, show message
+    if(e.message.includes('CORS')||e.message.includes('fetch')){
+      toast('CORS error — need backend proxy',1);
+    }
+  }
+  document.getElementById('last-update').textContent=new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+}
+
+function processQuotes(quotes){
+  const now=new Date();
+  const mktOpen=new Date();mktOpen.setHours(9,15,0,0);
+  const minsPassed=Math.max(1,(now-mktOpen)/60000);
+  const totalMins=375; // 9:15 to 3:30
+  quotes.forEach(q=>{
+    const sym=q.n.replace('NSE:','').replace('-EQ','');
+    const ltp=q.v?.lp||0;
+    const open=q.v?.open_price||ltp;
+    const pc=q.v?.prev_close_price||ltp;
+    const vol=q.v?.volume||0;
+    const chgPct=pc?((ltp-pc)/pc*100):0;
+    // Calculate expected volume by this time of day
+    // Use previous day's total volume if available, else estimate
+    const prevVol=q.v?.prev_volume||vol*(totalMins/Math.max(minsPassed,1));
+    const avgVol=prevVol||vol*2; // fallback
+    // Time-adjusted surge ratio
+    const expectedByNow=avgVol*(minsPassed/totalMins);
+    const ratio=expectedByNow>0?(vol/expectedByNow):0;
+    const prev=stockData[sym]||{};
+    const wasAbove=prev.ratio>=minFilter;
+    stockData[sym]={ltp,chg:chgPct.toFixed(2),vol,avgVol,ratio,prevVol,sym,updated:now};
+    // New surge alert
+    if(ratio>=minFilter&&!wasAbove&&scannerRunning){
+      addAlert(sym,ratio,chgPct,ltp);
+    }
+  });
+  renderSurgeList();
+  updateCounters();
+}
+
+function addAlert(sym,ratio,chg,ltp){
+  alertCount++;
+  document.getElementById('sc-alerts').textContent=alertCount;
+  const now=new Date();
+  const timeStr=now.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});
+  alertLog.unshift({sym,ratio,chg,ltp,time:timeStr});
+  if(alertLog.length>50) alertLog.pop();
+  renderAlerts();
+  // Play sound
+  try{
+    const ctx=new AudioContext();
+    const osc=ctx.createOscillator();
+    const gain=ctx.createGain();
+    osc.connect(gain);gain.connect(ctx.destination);
+    osc.frequency.value=880;gain.gain.value=0.1;
+    osc.start();gain.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+0.3);
+    osc.stop(ctx.currentTime+0.3);
+  }catch{}
+  toast(`🔥 ${sym} volume surge ${ratio.toFixed(1)}x!`,'suc');
+}
+
+function renderAlerts(){
+  const c=document.getElementById('alert-log-list');
+  if(!alertLog.length){c.innerHTML='<div style="font-size:11px;color:var(--text3);text-align:center;padding:12px">No alerts yet</div>';return;}
+  c.innerHTML=alertLog.slice(0,20).map(a=>`
+    <div class="alert-item">
+      <div class="alert-time">${a.time}</div>
+      <div class="alert-stock">${a.sym}</div>
+      <div class="alert-ratio ${a.ratio>=5?'':''}">
+        <span style="color:${a.ratio>=5?'var(--orange)':a.ratio>=3?'var(--green)':'var(--text2)'};font-weight:700">${a.ratio.toFixed(1)}x</span>
+      </div>
+      <div class="alert-msg">
+        ₹${a.ltp.toFixed(2)} 
+        <span style="color:${parseFloat(a.chg)>=0?'var(--green)':'var(--red)'}">${parseFloat(a.chg)>=0?'+':''}${parseFloat(a.chg).toFixed(2)}%</span>
+      </div>
+    </div>`).join('');
+}
+
+function clearAlerts(){alertLog=[];alertCount=0;document.getElementById('sc-alerts').textContent=0;renderAlerts();}
+
+function updateCounters(){
+  const surging=Object.values(stockData).filter(s=>s.ratio>=minFilter).length;
+  const vhot=Object.values(stockData).filter(s=>s.ratio>=5).length;
+  document.getElementById('sc-surging').textContent=surging;
+  document.getElementById('sc-hot').textContent=vhot;
+}
+
+function renderSurgeList(){
+  const c=document.getElementById('surge-list-container');
+  const items=Object.values(stockData)
+    .filter(s=>s.ratio>0)
+    .sort((a,b)=>b.ratio-a.ratio);
+
+  if(!items.length){
+    c.innerHTML=`<div class="empty"><div class="empty-icon">🔍</div><div class="empty-title">No Data Yet</div><div class="empty-sub">Start scanner to fetch live volume data.<br>Results appear here in real-time.</div></div>`;
+    return;
+  }
+
+  const filtered=items.filter(s=>s.ratio>=minFilter);
+  const watching=items.filter(s=>s.ratio<minFilter);
+  const maxRatio=Math.max(...items.map(s=>s.ratio),1);
+
+  let html='';
+
+  if(filtered.length){
+    html+=`<div style="font-family:var(--fd);font-size:10px;font-weight:700;letter-spacing:2px;color:var(--text3);margin-bottom:6px;text-transform:uppercase">🔥 Surging — Above ${minFilter}x (${filtered.length})</div>`;
+    html+=filtered.map((s,i)=>surgeItemHTML(s,maxRatio,i)).join('');
+  }
+
+  if(watching.length&&minFilter<=2){
+    html+=`<div style="font-family:var(--fd);font-size:10px;font-weight:700;letter-spacing:2px;color:var(--text3);margin:10px 0 6px;text-transform:uppercase">👀 Watching — Below ${minFilter}x</div>`;
+    html+=watching.slice(0,10).map((s,i)=>surgeItemHTML(s,maxRatio,i+filtered.length)).join('');
+  }
+
+  if(!filtered.length&&watching.length){
+    html=`<div class="empty"><div class="empty-icon">😴</div><div class="empty-title">No Surges Detected</div><div class="empty-sub">No stocks above ${minFilter}x volume yet.<br>Lower the filter or wait for market to heat up.</div></div>`+html;
+  }
+
+  c.innerHTML=`<div class="surge-list">${html}</div>`;
+}
+
+function surgeItemHTML(s,maxRatio,idx){
+  const ratio=s.ratio;
+  const chg=parseFloat(s.chg);
+  const volPct=Math.min(100,(ratio/Math.max(maxRatio,1)*100)).toFixed(0);
+
+  let itemClass='surge-item',barClass='slb-watch',badgeClass='sb-watch',badgeText='WATCH',ratioColor='var(--text2)';
+  if(ratio>=10){itemClass='surge-item extreme';barClass='slb-extreme';badgeClass='sb-extreme';badgeText='🚨 EXTREME';ratioColor='var(--red)';}
+  else if(ratio>=5){itemClass='surge-item very-hot';barClass='slb-very-hot';badgeClass='sb-very-hot';badgeText='🔥 VERY HOT';ratioColor='var(--orange)';}
+  else if(ratio>=minFilter){itemClass='surge-item hot';barClass='slb-hot';badgeClass='sb-hot';badgeText='⚡ SURGE';ratioColor='var(--green)';}
+
+  const volStr=s.vol>=10000000?(s.vol/10000000).toFixed(1)+'Cr':s.vol>=100000?(s.vol/100000).toFixed(1)+'L':s.vol>=1000?(s.vol/1000).toFixed(1)+'K':s.vol;
+  const avgStr=s.avgVol>=10000000?(s.avgVol/10000000).toFixed(1)+'Cr':s.avgVol>=100000?(s.avgVol/100000).toFixed(1)+'L':s.avgVol>=1000?(s.avgVol/1000).toFixed(1)+'K':s.avgVol;
+
+  return`<div class="${itemClass}" style="animation-delay:${idx*0.03}s">
+    <div class="surge-level-bar ${barClass}"></div>
+    <div class="surge-top">
+      <div class="surge-left">
+        <div class="surge-stock">${s.sym}</div>
+        <div class="surge-exch">NSE · EQ</div>
+      </div>
+      <div class="surge-right">
+        <div class="surge-ratio" style="color:${ratioColor}">${ratio.toFixed(1)}x</div>
+        <div class="surge-ratio-lbl">vs avg volume</div>
+      </div>
+    </div>
+    <div class="surge-mid">
+      <div class="surge-price">₹${s.ltp.toFixed(2)}</div>
+      <div class="surge-chg ${chg>=0?'surge-chg-up':'surge-chg-down'}">${chg>=0?'+':''}${chg.toFixed(2)}%</div>
+      <div class="surge-time">${s.updated?s.updated.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',second:'2-digit'}):''}</div>
+    </div>
+    <div class="vol-bar-wrap">
+      <div class="vol-bar-labels"><span>Vol: ${volStr}</span><span>Avg: ${avgStr}</span></div>
+      <div class="vol-bar-track">
+        <div class="vol-bar-fill" style="width:${volPct}%;background:${ratio>=10?'var(--red)':ratio>=5?'var(--orange)':ratio>=minFilter?'var(--green)':'var(--text3)'}"></div>
+      </div>
+      <div class="vol-bar-details"><span>Time-adjusted ratio</span><span>${volPct}% of max</span></div>
+    </div>
+    <div class="surge-badges">
+      <span class="sbadge ${badgeClass}">${badgeText}</span>
+      ${chg>=1.5?'<span class="sbadge sb-hot">📈 MOVING</span>':''}
+      ${chg<=-1.5?'<span class="sbadge sb-extreme">📉 FALLING</span>':''}
+      ${ratio>=3&&Math.abs(chg)>=2?'<span class="sbadge sb-very-hot">💥 BREAKOUT WATCH</span>':''}
+    </div>
+  </div>`;
+}
+
+// ══════════════════════════════════════════
+// TOAST
+// ══════════════════════════════════════════
+function toast(msg,type=''){
+  const t=document.getElementById('toast');
+  t.textContent=msg;t.className='toast'+(type==='suc'?' suc':type===1?' err':'');
+  setTimeout(()=>t.classList.add('show'),10);
+  setTimeout(()=>t.classList.remove('show'),3500);
+}
+</script>
+</body>
+</html>
